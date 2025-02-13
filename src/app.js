@@ -3,7 +3,9 @@ const express = require('express');
 const path = require('path');
 const app = express();
 const hbs = require('hbs');
-const bcrypt = require('bcryptjs')
+const bcrypt = require('bcryptjs');
+const cookieParser = require('cookie-parser');
+const auth = require('./middleware/auth')
 
 require('./db/conn');
 const Register = require('./models/registers')
@@ -15,6 +17,7 @@ const template_path = path.join(__dirname, "../templates/views");
 const partials_path = path.join(__dirname, "../templates/partials");
 
 app.use(express.json());
+app.use(cookieParser());
 app.use(express.urlencoded({ extended: false }));
 
 app.use(express.static(static_path));
@@ -26,6 +29,32 @@ hbs.registerPartials(partials_path)
 
 app.get('/', (req, res) => {
     res.render('index')
+})
+
+app.get('/secret', auth, (req, res) => {
+    // console.log(`this is the cookie awesome ${req.cookies.jwt}`);
+    res.render('secret')
+})
+
+app.get('/logout',auth,async(req,res)=>{
+    try {
+        console.log(req.user);
+
+        //for single logout
+        // req.user.tokens = req.user.tokens.filter((currElement)=>{
+        //     return currElement.token !== req.token
+        // })
+
+        //logout from all devices
+        req.user.tokens = [];
+
+        res.clearCookie('jwt');
+        console.log('logout successfully');
+        await req.user.save();
+        res.render('login')
+    } catch (error) {
+        resstatus(500).send(error)
+    }
 })
 
 app.get('/register', (req, res) => {
@@ -58,6 +87,12 @@ app.post('/register', async (req, res) => {
             const token = await registerEmployee.generateAuthToken();
             console.log('the token part' + token);
 
+
+            res.cookie('jwt',token,{
+                expires:new Date(Date.now()+30000),
+                httpOnly:true
+            });
+
             const registered = await registerEmployee.save();
             res.status(201).render("index")
 
@@ -84,6 +119,12 @@ app.post('/login', async (req, res) => {
 
         const token = await useremail.generateAuthToken();
         console.log('the token part' + token);
+
+        res.cookie('jwt',token,{
+            expires:new Date(Date.now()+100000),
+            httpOnly:true,
+            //secure:true
+        });
 
         if(isMatch){
             res.status(201).render('index')
